@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:ui';
 
 import 'package:adaptive_theme/adaptive_theme.dart';
 import 'package:desktop_window/desktop_window.dart';
@@ -79,7 +80,10 @@ Future restoreWindow({bool show = true}) async {
   if (show) {
     AppWindow().show();
   }
-  await DesktopWindow.setWindowSize(const Size(450, 350));
+
+  // Get DPI
+  var dpi = MediaQueryData.fromView(WidgetsBinding.instance.renderView.flutterView).devicePixelRatio;
+  await DesktopWindow.setWindowSize(const Size(450, 350) * dpi);
 }
 
 void main() async {
@@ -137,9 +141,7 @@ class _MyAppState extends State<MyApp> with WindowListener {
   // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
-    // var listener = ThemeListener(context);
     windowManager.hide();
-
     return AdaptiveTheme(
       initial: AdaptiveThemeMode.system,
       light: mat.ThemeData.light(),
