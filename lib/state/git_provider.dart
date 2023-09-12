@@ -2,13 +2,21 @@ import 'dart:io';
 
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:mutex/mutex.dart';
+import 'package:repos_synchronizer/state/log_state.dart';
 import 'package:repos_synchronizer/util.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:system_theme/system_theme.dart';
 
 class GitProvider extends ChangeNotifier {
   static const String sharedPrefKey = 'currentPath';
 
-  String errorMessage = '';
+  String _errorMessage = '';
+  String get errorMessage => _errorMessage;
+  set errorMessage(String value) {
+    _errorMessage = value;
+    LogState.addError(value);
+    notifyListeners();
+  }
 
   bool isUpdating = false;
 
@@ -24,10 +32,11 @@ class GitProvider extends ChangeNotifier {
   }
 
   bool localFilesModified = false;
-
   bool get isUpToDate => headHash == localHash;
 
-  GitProvider() {
+  final GlobalKey<NavigatorState> navigatorKey;
+
+  GitProvider(this.navigatorKey) {
     SharedPreferences.getInstance().then((x) => currentPath = x.getString(sharedPrefKey) ?? Directory.current.path);
   }
 
@@ -37,6 +46,7 @@ class GitProvider extends ChangeNotifier {
 
     var gitDisabledDir = Directory('$currentPath${Platform.pathSeparator}.git_disabled');
     if (await gitDisabledDir.exists()) {
+      LogState.addLog('Renaming ${gitDisabledDir.path} to ${gitDisabledDir.path.replaceAll('.git_disabled', '.git')}');
       await gitDisabledDir.rename('.git');
     }
   }
@@ -44,26 +54,93 @@ class GitProvider extends ChangeNotifier {
   Future renameBack() async {
     var gitDir = Directory('$currentPath${Platform.pathSeparator}.git');
     if (await gitDir.exists()) {
+      LogState.addLog('Renaming ${gitDir.path} to ${gitDir.path.replaceAll('.git', '.git_disabled')}');
       await gitDir.rename('.git_disabled');
     }
   }
 
   Future modifyGitRecursively(String match, String targetName) async {
     var dir = Directory(currentPath);
-    var list = dir.list(recursive: true).where((x) => x == match);
-    await list.forEach((element) {
-      element.rename(targetName);
-    });
+    var list = await dir.list(recursive: true).where((x) => x.path.endsWith(match)).toList();
+    for (var item in list) {
+      try {
+        LogState.addLog('Renaming ${item.path} to ${item.path.replaceAll(match, targetName)}');
+        await item.rename(item.path.replaceAll(match, targetName));
+      } on Exception catch (e) {
+        var message = e.toString();
+        if (!await showContinueQuestionDialog(message)) {
+          errorMessage = message;
+          return Future.error(message);
+        }
+      }
+    }
   }
 
   Mutex directoryMutex = Mutex();
-  Future hideGit() => modifyGitRecursively('.git', '.git_disabled');
-  Future enableGit() => modifyGitRecursively('.git_disabled', '.git');
+  Future hideGit() async => await modifyGitRecursively('.git', '.git_disabled');
+  Future enableGit() async => await modifyGitRecursively('.git_disabled', '.git');
+
+  Future<bool> showContinueQuestionDialog(String message) async {
+    var result = await showDialog(
+      context: navigatorKey.currentContext!,
+      builder: (b) => ContentDialog(
+        title: const Text('An error occured'),
+        actions: [
+          Button(
+            onPressed: () => Navigator.pop(navigatorKey.currentContext!, true),
+            child: const Text('Yes'),
+          ),
+          Button(
+            onPressed: () => Navigator.pop(navigatorKey.currentContext!, false),
+            autofocus: true,
+            style: ButtonStyle(
+              backgroundColor: ButtonState.all(SystemTheme.accentColor.accent.toAccentColor()),
+            ),
+            child: const Text('No'),
+          ),
+        ],
+        content: SingleChildScrollView(
+          scrollDirection: Axis.vertical,
+          child: Column(
+            children: [
+              Text(message),
+              const Padding(
+                padding: EdgeInsets.only(top: 16.0),
+                child: Text(
+                  'Do you want to continue?',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ) as bool?;
+
+    return result ?? false;
+  }
+
+  Future executeWithErrorCheck(Future Function() f) async {
+    await f();
+
+    if (errorMessage.isNotEmpty) {
+      var result = await showContinueQuestionDialog(errorMessage);
+      if (result == true) {
+        errorMessage = '';
+      } else {
+        throw Exception(errorMessage);
+      }
+    }
+
+    return true;
+  }
 
   Future push() async {
     await directoryMutex.protect(() async {
       isUpdating = true;
       notifyListeners();
+
+      LogState.addLog('Pushing...');
 
       if (!isUpToDate) {
         await pull(notify: false, useMutex: false);
@@ -72,18 +149,24 @@ class GitProvider extends ChangeNotifier {
       try {
         await hideGit();
         await changeDirectory();
+
         var commitName = DateTime.now().toIso8601String().replaceAll(':', '-').replaceAll('.', '-');
-        await Util.executeShellCommand('git add .');
-        await Util.executeShellCommand('git commit -m $commitName');
-        await Util.executeShellCommand('git push');
+        await executeWithErrorCheck(() => Util.executeShellCommand('git add .'));
+        await executeWithErrorCheck(() => Util.executeShellCommand('git commit -m $commitName'));
+        await executeWithErrorCheck(() => Util.executeShellCommand('git push'));
 
         await update(useMutex: false);
         await enableGit();
       } catch (e) {
         errorMessage = e.toString();
+        LogState.addError("Push error - ${e.toString()}");
       }
 
       await renameBack();
+
+      if (errorMessage.isEmpty) {
+        LogState.addLog('Push successful');
+      }
 
       isUpdating = false;
       notifyListeners();
@@ -101,17 +184,24 @@ class GitProvider extends ChangeNotifier {
       notifyListeners();
     }
 
+    LogState.addLog('Pulling...');
+
     try {
       await hideGit();
       await changeDirectory();
-      await Util.executeShellCommand('git pull');
+      await executeWithErrorCheck(() => Util.executeShellCommand('git pull'));
       await update(notify: notify, useMutex: false);
       await enableGit();
     } catch (e) {
       errorMessage = e.toString();
+      LogState.addError("Pull error - ${e.toString()}");
     }
 
     await renameBack();
+
+    if (errorMessage.isEmpty) {
+      LogState.addLog('Pull successful');
+    }
 
     if (notify) {
       isUpdating = false;
@@ -125,6 +215,7 @@ class GitProvider extends ChangeNotifier {
       return;
     }
 
+    LogState.addLog('Updating...');
     if (notify) {
       isUpdating = true;
       errorMessage = '';
@@ -145,10 +236,15 @@ class GitProvider extends ChangeNotifier {
 
       localFilesModified = (await newStatus).isNotEmpty;
     } catch (e) {
+      LogState.addError("Update error - ${e.toString()}");
       errorMessage = e.toString();
     }
 
     await renameBack();
+
+    if (errorMessage.isEmpty) {
+      LogState.addLog('Update successful');
+    }
 
     if (notify) {
       isUpdating = false;

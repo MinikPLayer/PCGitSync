@@ -1,5 +1,7 @@
 import 'dart:io';
 
+import 'package:repos_synchronizer/state/log_state.dart';
+
 class Util {
   static Future<String> executeShellCommand(String command) async {
     var exec = '';
@@ -15,15 +17,21 @@ class Util {
     }
 
     args.add(command.replaceAll('"', '\\"'));
-    var process = await Process.run(exec, args);
-    if (process.exitCode != 0) {
-      if (process.stderr.toString().isNotEmpty) {
-        return Future.error(process.stderr.toString());
+    var process = Process.run(exec, args);
+    process.asStream().listen((event) {
+      LogState.addLog(event.stdout.toString());
+    });
+
+    var processEnd = await process;
+
+    if (processEnd.exitCode != 0) {
+      if (processEnd.stderr.toString().isNotEmpty) {
+        return Future.error(processEnd.stderr.toString());
       } else {
-        return Future.error('Shell process execute with error code ${process.exitCode}');
+        return Future.error('Shell process execute with error code ${processEnd.exitCode}');
       }
     }
 
-    return process.stdout.toString();
+    return processEnd.stdout.toString();
   }
 }

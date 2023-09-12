@@ -11,6 +11,7 @@ import 'package:flutter_acrylic/flutter_acrylic.dart' as facrylic;
 import 'package:flutter_acrylic/window_effect.dart';
 import 'package:repos_synchronizer/settings_page.dart';
 import 'package:repos_synchronizer/state/git_provider.dart';
+import 'package:repos_synchronizer/state/log_state.dart';
 import 'package:system_theme/system_theme.dart';
 import 'package:system_tray/system_tray.dart';
 import 'package:provider/provider.dart';
@@ -83,9 +84,10 @@ Future restoreWindow({bool show = true}) async {
 
   // Get DPI
   var dpi = MediaQueryData.fromView(WidgetsBinding.instance.renderView.flutterView).devicePixelRatio;
-  await DesktopWindow.setWindowSize(const Size(450, 350) * dpi);
+  await DesktopWindow.setWindowSize(const Size(450, 450) * dpi);
 }
 
+final navigationKey = GlobalKey<NavigatorState>();
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -157,9 +159,10 @@ class _MyAppState extends State<MyApp> with WindowListener {
         }
 
         return FluentApp(
+          navigatorKey: navigationKey,
           debugShowCheckedModeBanner: false,
           home: ChangeNotifierProvider(
-            create: (c) => GitProvider(),
+            create: (c) => GitProvider(navigationKey),
             child: const MyHomePage(title: 'Hello world!'),
           ),
           darkTheme: FluentThemeData(
@@ -202,150 +205,129 @@ class MyHomePage extends StatefulWidget {
 }
 
 class _MyHomePageState extends State<MyHomePage> {
+  final LogState logState = LogState();
+
   int selectedIndex = 0;
 
   @override
   Widget build(BuildContext context) {
     var p = Provider.of<GitProvider>(context, listen: true);
-    List<Widget> children;
-    if (p.errorMessage.isNotEmpty) {
-      children = [
-        const Text('Error getting git data'),
-        Text(p.errorMessage),
-        Padding(
-          padding: const EdgeInsets.all(8.0),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const SizedBox(width: 24, height: 24),
-              Button(
-                onPressed: p.isUpdating
-                    ? null
-                    : () async {
-                        await p.update();
-                      },
-                child: const Text('Refresh'),
-              ),
-            ],
-          ),
-        ),
-      ];
-    } else {
-      children = [
-        Text('Local Hash: ${p.localHash}'),
-        Text('HEAD Hash: ${p.headHash}'),
-        Padding(
-          padding: const EdgeInsets.all(8.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.start,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Padding(
-                padding: const EdgeInsets.all(8.0),
-                child: Checkbox(
-                  checked: p.isUpToDate,
-                  content: const Text(
-                    'Up to date',
-                  ),
-                  onChanged: null,
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.all(8.0),
-                child: Checkbox(
-                  checked: !p.localFilesModified,
-                  content: const Text(
-                    'Local files unmodified',
-                  ),
-                  onChanged: null,
-                ),
-              ),
-            ],
-          ),
-        ),
-        Row(
-          mainAxisSize: MainAxisSize.max,
-          mainAxisAlignment: MainAxisAlignment.center,
+    List<Widget> children = [
+      Text('Local Hash: ${p.localHash}'),
+      Text('HEAD Hash: ${p.headHash}'),
+      Padding(
+        padding: const EdgeInsets.all(8.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Padding(
               padding: const EdgeInsets.all(8.0),
-              child: Button(
-                style: ButtonStyle(
-                  backgroundColor: p.isUpToDate || p.isUpdating
-                      ? null
-                      : ButtonState.all(
-                          SystemTheme.accentColor.accent.toAccentColor(),
-                        ),
+              child: Checkbox(
+                checked: p.isUpToDate,
+                content: const Text(
+                  'Up to date',
                 ),
-                onPressed: p.isUpdating || p.isUpToDate ? null : () => p.pull(),
-                child: const Row(
-                  children: [
-                    Padding(
-                      padding: EdgeInsets.only(right: 8.0),
-                      child: Icon(FluentIcons.download),
-                    ),
-                    Text('Pull'),
-                  ],
-                ),
-              ),
-            ),
-            Button(
-              onPressed: p.isUpdating ? null : () => p.update(),
-              child: const Row(
-                children: [
-                  Text('Refresh'),
-                  Padding(
-                    padding: EdgeInsets.only(left: 8.0),
-                    child: Icon(FluentIcons.refresh),
-                  ),
-                ],
+                onChanged: null,
               ),
             ),
             Padding(
               padding: const EdgeInsets.all(8.0),
-              child: Button(
-                style: ButtonStyle(
-                  backgroundColor: p.isUpdating || !p.localFilesModified
-                      ? null
-                      : ButtonState.all(
-                          SystemTheme.accentColor.accent.toAccentColor(),
-                        ),
+              child: Checkbox(
+                checked: !p.localFilesModified,
+                content: const Text(
+                  'Local files unmodified',
                 ),
-                onPressed: p.isUpdating || !p.localFilesModified ? null : () => p.push(),
-                child: const Row(
-                  children: [
-                    Text('Push'),
-                    Padding(
-                      padding: EdgeInsets.only(left: 8.0),
-                      child: Icon(FluentIcons.upload),
-                    ),
-                  ],
-                ),
+                onChanged: null,
               ),
             ),
           ],
         ),
-        Padding(
-          padding: const EdgeInsets.all(8.0),
-          child: mat.CircularProgressIndicator(
-            value: p.isUpdating ? null : 0,
-            color: SystemTheme.accentColor.accent.toAccentColor(),
+      ),
+      Row(
+        mainAxisSize: MainAxisSize.max,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: Button(
+              style: ButtonStyle(
+                backgroundColor: p.isUpToDate || p.isUpdating
+                    ? null
+                    : ButtonState.all(
+                        SystemTheme.accentColor.accent.toAccentColor(),
+                      ),
+              ),
+              onPressed: p.isUpdating || p.isUpToDate ? null : () => p.pull(),
+              child: const Row(
+                children: [
+                  Padding(
+                    padding: EdgeInsets.only(right: 8.0),
+                    child: Icon(FluentIcons.download),
+                  ),
+                  Text('Pull'),
+                ],
+              ),
+            ),
           ),
-        ),
-      ];
-    }
+          Button(
+            onPressed: p.isUpdating ? null : () => p.update(),
+            child: const Row(
+              children: [
+                Text('Refresh'),
+                Padding(
+                  padding: EdgeInsets.only(left: 8.0),
+                  child: Icon(FluentIcons.refresh),
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: Button(
+              style: ButtonStyle(
+                backgroundColor: p.isUpdating || !p.localFilesModified
+                    ? null
+                    : ButtonState.all(
+                        SystemTheme.accentColor.accent.toAccentColor(),
+                      ),
+              ),
+              onPressed: p.isUpdating || !p.localFilesModified ? null : () => p.push(),
+              child: const Row(
+                children: [
+                  Text('Push'),
+                  Padding(
+                    padding: EdgeInsets.only(left: 8.0),
+                    child: Icon(FluentIcons.upload),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    ];
 
     // Use transparent container to disable error sound on click
     return Container(
       color: Colors.transparent,
       child: Column(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        mainAxisAlignment: MainAxisAlignment.start,
         children: [
           Padding(
             padding: const EdgeInsets.all(8.0),
             child: Row(
-              mainAxisAlignment: MainAxisAlignment.end,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
+                SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: mat.CircularProgressIndicator(
+                    value: p.isUpdating ? null : 0,
+                    color: SystemTheme.accentColor.accent.toAccentColor(),
+                    strokeWidth: 2,
+                  ),
+                ),
                 IconButton(
                   icon: const Icon(FluentIcons.settings),
                   onPressed: () {
@@ -360,12 +342,41 @@ class _MyHomePageState extends State<MyHomePage> {
               ],
             ),
           ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: children,
+          Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: children,
+            ),
           ),
-          const SizedBox(),
+          Expanded(
+            child: SingleChildScrollView(
+              child: Padding(
+                padding: const EdgeInsets.all(8.0),
+                child: ChangeNotifierProvider(
+                  create: (context) => logState,
+                  child: AnimatedList(
+                    controller: LogState.logListScrollController,
+                    reverse: true,
+                    shrinkWrap: true,
+                    key: LogState.logListKey,
+                    itemBuilder: (context, index, animation) => Padding(
+                      padding: const EdgeInsets.all(8.0),
+                      child: Text(
+                        textAlign: TextAlign.left,
+                        LogState.logs[index].$1,
+                        style: TextStyle(
+                          color: LogState.logs[index].$2.withOpacity(index == LogState.logs.length - 1 ? 1 : 0.5),
+                        ),
+                      ),
+                    ),
+                    initialItemCount: LogState.logs.length > 5 ? 5 : LogState.logs.length,
+                  ),
+                ),
+              ),
+            ),
+          ),
         ],
       ),
     );
