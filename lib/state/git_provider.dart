@@ -120,7 +120,7 @@ class GitProvider extends ChangeNotifier {
     return result ?? false;
   }
 
-  Future executeWithErrorCheck(Future Function() f) async {
+  Future<bool> executeWithErrorCheck(Future Function() f) async {
     await f();
 
     if (errorMessage.isNotEmpty) {
@@ -156,9 +156,15 @@ class GitProvider extends ChangeNotifier {
         await executeWithErrorCheck(() => Util.executeShellCommand('git push'));
 
         await update(useMutex: false);
-        await enableGit();
       } catch (e) {
         errorMessage = e.toString();
+        LogState.addError("Push error - ${e.toString()}");
+      }
+
+      try {
+        await enableGit();
+      } catch (e) {
+        errorMessage += e.toString();
         LogState.addError("Push error - ${e.toString()}");
       }
 
@@ -191,9 +197,15 @@ class GitProvider extends ChangeNotifier {
       await changeDirectory();
       await executeWithErrorCheck(() => Util.executeShellCommand('git pull'));
       await update(notify: notify, useMutex: false);
-      await enableGit();
     } catch (e) {
       errorMessage = e.toString();
+      LogState.addError("Pull error - ${e.toString()}");
+    }
+
+    try {
+      await enableGit();
+    } catch (e) {
+      errorMessage += e.toString();
       LogState.addError("Pull error - ${e.toString()}");
     }
 
@@ -227,17 +239,31 @@ class GitProvider extends ChangeNotifier {
 
       var newHeadHash = Util.executeShellCommand('git ls-remote');
       var newLocalHash = Util.executeShellCommand('git rev-parse HEAD');
-      var newStatus = Util.executeShellCommand('git status --short');
 
       localHash = (await newLocalHash).trim();
       notifyListeners();
       headHash = ((await newHeadHash).split('\n')[0].split('\t')[0]).trim();
       notifyListeners();
-
-      localFilesModified = (await newStatus).isNotEmpty;
     } catch (e) {
       LogState.addError("Update error - ${e.toString()}");
       errorMessage = e.toString();
+    }
+
+    try {
+      await hideGit();
+      String newStatus = '';
+      await executeWithErrorCheck(() async => newStatus = await Util.executeShellCommand('git pull'));
+      localFilesModified = newStatus.isNotEmpty;
+    } catch (e) {
+      errorMessage = e.toString();
+      LogState.addError("Pull error - ${e.toString()}");
+    }
+
+    try {
+      await enableGit();
+    } catch (e) {
+      errorMessage += e.toString();
+      LogState.addError("Pull error - ${e.toString()}");
     }
 
     await renameBack();
