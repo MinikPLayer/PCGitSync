@@ -251,8 +251,8 @@ class GitProvider extends ChangeNotifier {
 
     try {
       await hideGit();
-      String newStatus = '';
-      await executeWithErrorCheck(() async => newStatus = await Util.executeShellCommand('git pull'));
+      await changeDirectory();
+      var newStatus = await Util.executeShellCommand('git status --short');
       localFilesModified = newStatus.isNotEmpty;
     } catch (e) {
       errorMessage = e.toString();
