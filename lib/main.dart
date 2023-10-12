@@ -26,6 +26,11 @@ bool get isDesktop {
   ].contains(defaultTargetPlatform);
 }
 
+bool get isWindows {
+  if (kIsWeb) return false;
+  return defaultTargetPlatform == TargetPlatform.windows;
+}
+
 bool get isDarkMode {
   var brightness = SchedulerBinding.instance.platformDispatcher.platformBrightness;
   return brightness == Brightness.dark;
@@ -44,7 +49,6 @@ Future<void> initSystemTray() async {
   tray = SystemTray();
 
   await tray.initSystemTray(
-    title: 'Repos synchronizer',
     iconPath: isDarkMode ? 'assets/icon_dark_theme.ico' : 'assets/icon_light_theme.ico',
   );
 
@@ -93,11 +97,13 @@ void main() async {
 
   if (isDesktop) {
     await restoreWindow(show: false);
-    await facrylic.Window.initialize();
-    await facrylic.Window.setEffect(
-      effect: WindowEffect.mica,
-      dark: isDarkMode,
-    );
+    if (isWindows) {
+      await facrylic.Window.initialize();
+      await facrylic.Window.setEffect(
+        effect: WindowEffect.mica,
+        dark: isDarkMode,
+      );
+    }
 
     await initSystemTray();
   }
@@ -150,10 +156,12 @@ class _MyAppState extends State<MyApp> with WindowListener {
       dark: mat.ThemeData.dark(),
       builder: (light, dark) {
         if (isDesktop) {
-          facrylic.Window.setEffect(
-            effect: WindowEffect.mica,
-            dark: isDarkMode,
-          );
+          if (isWindows) {
+            facrylic.Window.setEffect(
+              effect: WindowEffect.mica,
+              dark: isDarkMode,
+            );
+          }
 
           setSystemTrayIcon();
         }
@@ -168,21 +176,21 @@ class _MyAppState extends State<MyApp> with WindowListener {
           darkTheme: FluentThemeData(
             brightness: Brightness.dark,
             acrylicBackgroundColor: Colors.purple.withOpacity(0.5),
-            inactiveBackgroundColor: Colors.transparent,
-            activeColor: Colors.transparent,
+            inactiveBackgroundColor: Colors.black,
+            activeColor: Colors.black,
             accentColor: SystemTheme.accentColor.accent.toAccentColor(),
             visualDensity: VisualDensity.standard,
             focusTheme: FocusThemeData(
               glowFactor: is10footScreen(context) ? 2.0 : 0.0,
             ),
             navigationPaneTheme: const NavigationPaneThemeData(
-              backgroundColor: Colors.transparent,
+              backgroundColor: Colors.black,
             ),
           ),
           theme: FluentThemeData(
             accentColor: SystemTheme.accentColor.accent.toAccentColor(),
-            acrylicBackgroundColor: Colors.transparent,
-            inactiveBackgroundColor: Colors.transparent,
+            acrylicBackgroundColor: Colors.black,
+            inactiveBackgroundColor: Colors.black,
             visualDensity: VisualDensity.standard,
             focusTheme: FocusThemeData(
               glowFactor: is10footScreen(context) ? 2.0 : 0.0,
@@ -310,7 +318,7 @@ class _MyHomePageState extends State<MyHomePage> {
 
     // Use transparent container to disable error sound on click
     return Container(
-      color: Colors.transparent,
+      color: isWindows ? Colors.transparent : Colors.grey,
       child: Column(
         mainAxisAlignment: MainAxisAlignment.start,
         children: [
