@@ -1,20 +1,20 @@
 import 'dart:io';
-import 'dart:ui';
 
 import 'package:adaptive_theme/adaptive_theme.dart';
-import 'package:desktop_window/desktop_window.dart';
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart' as mat;
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_acrylic/flutter_acrylic.dart' as facrylic;
 import 'package:flutter_acrylic/window_effect.dart';
+import 'package:hotkey_manager/hotkey_manager.dart';
 import 'package:repos_synchronizer/settings_page.dart';
 import 'package:repos_synchronizer/state/git_provider.dart';
 import 'package:repos_synchronizer/state/log_state.dart';
+import 'package:screen_retriever/screen_retriever.dart';
 import 'package:system_theme/system_theme.dart';
-import 'package:system_tray/system_tray.dart';
 import 'package:provider/provider.dart';
+import 'package:tray_manager/tray_manager.dart';
 import 'package:window_manager/window_manager.dart';
 
 bool get isDesktop {
@@ -26,84 +26,125 @@ bool get isDesktop {
   ].contains(defaultTargetPlatform);
 }
 
-bool get isWindows {
-  if (kIsWeb) return false;
-  return defaultTargetPlatform == TargetPlatform.windows;
-}
-
 bool get isDarkMode {
   var brightness = SchedulerBinding.instance.platformDispatcher.platformBrightness;
   return brightness == Brightness.dark;
 }
 
-late SystemTray tray;
-Future<void> setSystemTrayIcon() async {
+Future<void> setSystemTrayIcon({bool delayed = true}) async {
   // Windows takes a while to change the theme, so we need to wait a bit (tbh yes, it's a bodged hack and not really needed xd)
-  await Future.delayed(const Duration(milliseconds: 100));
-  tray.setImage(isDarkMode ? 'assets/icon_dark_theme.ico' : 'assets/icon_light_theme.ico');
+  if (delayed) {
+    await Future.delayed(const Duration(milliseconds: 100));
+  }
+  return trayManager.setIcon(isDarkMode ? 'assets/icon_dark_theme.ico' : 'assets/icon_light_theme.ico');
 }
 
 Future<void> initSystemTray() async {
-  // Load icon from assets
-  var appWindow = AppWindow();
-  tray = SystemTray();
+  await trayManager.setToolTip("Repos synchronizer");
+  await setSystemTrayIcon(delayed: false);
 
-  await tray.initSystemTray(
-    iconPath: isDarkMode ? 'assets/icon_dark_theme.ico' : 'assets/icon_light_theme.ico',
-  );
-
-  final menu = Menu();
-  await menu.buildFrom([
-    MenuItemLabel(
+  final menu = Menu(items: [
+    MenuItem(
       label: 'Show',
-      onClicked: (i) async => await restoreWindow(),
+      key: "show",
+      onClick: (i) => restoreWindow(useTrayPos: true, useTrayFullSize: true),
     ),
-    MenuItemLabel(
+    MenuItem(
       label: 'Hide',
-      onClicked: (i) => appWindow.hide(),
+      key: "hide",
+      onClick: (i) => windowManager.hide(),
     ),
-    MenuItemLabel(
+    MenuItem(
       label: 'Exit',
-      onClicked: (i) async {
+      key: "exit",
+      onClick: (i) async {
         await windowManager.setPreventClose(false);
-        await appWindow.close();
+        await windowManager.close();
       },
     ),
   ]);
-  await tray.setContextMenu(menu);
-
-  tray.registerSystemTrayEventHandler((eventName) async {
-    if (eventName == kSystemTrayEventClick) {
-      Platform.isWindows ? await restoreWindow() : tray.popUpContextMenu();
-    } else if (eventName == kSystemTrayEventRightClick) {
-      Platform.isWindows ? tray.popUpContextMenu() : await restoreWindow();
-    }
-  });
+  await trayManager.setContextMenu(menu);
 }
 
-Future restoreWindow({bool show = true}) async {
+Future restoreWindow({bool show = true, bool useTrayPos = false, bool useTrayFullSize = false}) async {
   if (show) {
-    AppWindow().show();
+    await windowManager.waitUntilReadyToShow(null, () async {
+      // Get DPI
+      var dpi = windowManager.getDevicePixelRatio();
+      var windowSize = const Size(400, 400) * dpi;
+
+      Offset? position;
+      if (useTrayPos) {
+        var bounds = await trayManager.getBounds();
+        if (bounds != null) {
+          if (!useTrayFullSize) {
+            windowSize = Size(windowSize.width, windowSize.height * 0.65);
+          }
+          position = Offset(bounds.left, bounds.top);
+          position -= Offset(windowSize.width / 2, windowSize.height);
+        }
+      }
+
+      if (position == null) {
+        var cursorPos = await screenRetriever.getCursorScreenPoint();
+        position = cursorPos - Offset(windowSize.width / 2, windowSize.height / 2);
+      }
+
+      await windowManager.setPosition(position);
+      await windowManager.setSize(windowSize);
+      windowManager.show();
+    });
+  }
+}
+
+Future setWindowEffects() {
+  var osVersion = Platform.operatingSystemVersion;
+
+  bool isWindows11 = false;
+  if (Platform.isWindows) {
+    const String buildString = "(Build ";
+    var buildIndex = osVersion.indexOf(buildString);
+    if (buildIndex != -1) {
+      var build = osVersion.substring(buildIndex + buildString.length, osVersion.indexOf(')'));
+      var buildInt = int.tryParse(build);
+      if (buildInt != null && buildInt >= 22000) {
+        isWindows11 = true;
+      }
+    }
   }
 
-  // Get DPI
-  var dpi = MediaQueryData.fromView(WidgetsBinding.instance.renderView.flutterView).devicePixelRatio;
-  await DesktopWindow.setWindowSize(const Size(450, 450) * dpi);
+  if (isDesktop) {
+    return facrylic.Window.setEffect(
+      effect: isWindows11 ? WindowEffect.mica : WindowEffect.acrylic,
+      color: Colors.grey.withAlpha(220),
+      dark: isDarkMode,
+    );
+  }
+
+  return Future.value(true);
 }
 
 final navigationKey = GlobalKey<NavigatorState>();
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  await windowManager.ensureInitialized();
+  await hotKeyManager.unregisterAll();
+
+  // Open app hotkey
+  var openAppHotkey = HotKey(
+    KeyCode.keyR,
+    modifiers: [KeyModifier.control, KeyModifier.alt],
+    scope: HotKeyScope.system,
+  );
+  await hotKeyManager.register(openAppHotkey, keyDownHandler: (hotKey) {
+    restoreWindow();
+  });
+
   if (isDesktop) {
     await restoreWindow(show: false);
-    if (isWindows) {
-      await facrylic.Window.initialize();
-      await facrylic.Window.setEffect(
-        effect: WindowEffect.mica,
-        dark: isDarkMode,
-      );
-    }
+    await facrylic.Window.initialize();
+    await setWindowEffects();
 
     await initSystemTray();
   }
@@ -118,11 +159,12 @@ class MyApp extends StatefulWidget {
   State<MyApp> createState() => _MyAppState();
 }
 
-class _MyAppState extends State<MyApp> with WindowListener {
+class _MyAppState extends State<MyApp> with WindowListener, TrayListener {
   @override
   void initState() {
     super.initState();
     windowManager.addListener(this);
+    trayManager.addListener(this);
     _init();
   }
 
@@ -138,9 +180,19 @@ class _MyAppState extends State<MyApp> with WindowListener {
   }
 
   @override
+  void onTrayIconMouseDown() {
+    restoreWindow(useTrayPos: true);
+  }
+
+  @override
+  void onTrayIconRightMouseDown() {
+    trayManager.popUpContextMenu();
+  }
+
+  @override
   void onWindowClose() async {
     if (await windowManager.isPreventClose()) {
-      AppWindow().hide();
+      windowManager.hide();
     } else {
       await windowManager.destroy();
     }
@@ -156,13 +208,7 @@ class _MyAppState extends State<MyApp> with WindowListener {
       dark: mat.ThemeData.dark(),
       builder: (light, dark) {
         if (isDesktop) {
-          if (isWindows) {
-            facrylic.Window.setEffect(
-              effect: WindowEffect.mica,
-              dark: isDarkMode,
-            );
-          }
-
+          setWindowEffects();
           setSystemTrayIcon();
         }
 
@@ -176,21 +222,21 @@ class _MyAppState extends State<MyApp> with WindowListener {
           darkTheme: FluentThemeData(
             brightness: Brightness.dark,
             acrylicBackgroundColor: Colors.purple.withOpacity(0.5),
-            inactiveBackgroundColor: Colors.black,
-            activeColor: Colors.black,
+            inactiveBackgroundColor: Colors.transparent,
+            activeColor: Colors.transparent,
             accentColor: SystemTheme.accentColor.accent.toAccentColor(),
             visualDensity: VisualDensity.standard,
             focusTheme: FocusThemeData(
               glowFactor: is10footScreen(context) ? 2.0 : 0.0,
             ),
             navigationPaneTheme: const NavigationPaneThemeData(
-              backgroundColor: Colors.black,
+              backgroundColor: Colors.transparent,
             ),
           ),
           theme: FluentThemeData(
             accentColor: SystemTheme.accentColor.accent.toAccentColor(),
-            acrylicBackgroundColor: Colors.black,
-            inactiveBackgroundColor: Colors.black,
+            acrylicBackgroundColor: Colors.transparent,
+            inactiveBackgroundColor: Colors.transparent,
             visualDensity: VisualDensity.standard,
             focusTheme: FocusThemeData(
               glowFactor: is10footScreen(context) ? 2.0 : 0.0,
@@ -318,7 +364,7 @@ class _MyHomePageState extends State<MyHomePage> {
 
     // Use transparent container to disable error sound on click
     return Container(
-      color: isWindows ? Colors.transparent : Colors.grey,
+      color: Colors.transparent,
       child: Column(
         mainAxisAlignment: MainAxisAlignment.start,
         children: [

@@ -5,9 +5,10 @@
 list(APPEND FLUTTER_PLUGIN_LIST
   desktop_window
   flutter_acrylic
+  hotkey_manager
   screen_retriever
   system_theme
-  system_tray
+  tray_manager
   window_manager
 )
 
