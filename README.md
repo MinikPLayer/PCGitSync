@@ -1,16 +1,8 @@
-# repos_synchronizer
+# ReposSync
+Simple tray app to automate quirks when using *git* as a PC synchronization method.
 
-A new Flutter project.
+# Git as a PC sync method
+Shared directory set up as a git project. This allows to work on different project asynchronously with different machines, but there are some quirks. For example if there is a *.git* folder in one of subfolders, then it would be treated as a git submodule (which is not what we want). To avoid this *.git* folder should be renamed to something else (like *.git_disabled*) before sync, and after sync renamed back. This process can be easily automated with this tray app.
 
-## Getting Started
-
-This project is a starting point for a Flutter application.
-
-A few resources to get you started if this is your first Flutter project:
-
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
-
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+# Usage
+Just download the latest release and unpack to any folder. Run **repos_synchronizer.exe**, which should spawn a new icon in your system tray. You can bring it to the screen by clicking the icon or by pressing a hotkey *CTRL+ALT+R*. Then select project directory from settings menu. Now app should automatically pick up you repository, and you can manipulate it using one of the provided buttons. Buttons will be greyed out when action is not available.
