@@ -1,4 +1,4 @@
-# ReposSync
+# PCGitSync
 Simple tray app to automate quirks when using *git* as a PC synchronization method.
 
 # Git as a PC sync method
@@ -6,3 +6,6 @@ Shared directory set up as a git project. This allows to work on different proje
 
 # Usage
 Just download the latest release and unpack to any folder. Run **repos_synchronizer.exe**, which should spawn a new icon in your system tray. You can bring it to the screen by clicking the icon or by pressing a hotkey *CTRL+ALT+R*. Then select project directory from settings menu. Now app should automatically pick up you repository, and you can manipulate it using one of the provided buttons. Buttons will be greyed out when action is not available.
+
+# Compatibility
+App is tested on *Windows 10* and *Windows 11*. Should also work on Linux after installing required packages (ayatana-appindicator3-0.1 or appindicator3-0.1 depending on distro version). App is **not** tested on macOS because i don't have any compatible device, but it *should* work.
