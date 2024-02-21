@@ -69,16 +69,14 @@ Future<void> initSystemTray() async {
 Future restoreWindow({bool show = true, bool useTrayPos = false, bool useTrayFullSize = false}) async {
   if (show) {
     await windowManager.waitUntilReadyToShow(null, () async {
-      // Get DPI
-      var dpi = windowManager.getDevicePixelRatio();
-      var windowSize = const Size(400, 400) * dpi;
+      var windowSize = const Size(450, 450);
 
       Offset? position;
       if (useTrayPos) {
         var bounds = await trayManager.getBounds();
         if (bounds != null) {
           if (!useTrayFullSize) {
-            windowSize = Size(windowSize.width, windowSize.height * 0.65);
+            windowSize = const Size(450, 325);
           }
           position = Offset(bounds.left, bounds.top);
           position -= Offset(windowSize.width / 2, windowSize.height);
@@ -115,8 +113,8 @@ Future setWindowEffects() {
 
   if (isDesktop) {
     return facrylic.Window.setEffect(
-      effect: isWindows11 ? WindowEffect.mica : WindowEffect.acrylic,
-      color: Colors.grey.withAlpha(220),
+      effect: isWindows11 ? WindowEffect.mica : WindowEffect.aero,
+      color: Colors.black.withAlpha(196),
       dark: isDarkMode,
     );
   }
