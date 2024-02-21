@@ -1,6 +1,8 @@
 # PCGitSync
 Simple tray app to automate quirks when using *git* as a PC synchronization method.
 
+<img src="https://github.com/MinikPLayer/PCGitSync/blob/main/Screenshot.png" alt="drawing" width="600"/>
+
 # Git as a PC sync method
 Shared directory set up as a git project. This allows to work on different project asynchronously with different machines, but there are some quirks. For example if there is a *.git* folder in one of subfolders, then it would be treated as a git submodule (which is not what we want). To avoid this *.git* folder should be renamed to something else (like *.git_disabled*) before sync, and after sync renamed back. This process can be easily automated with this tray app.
 
