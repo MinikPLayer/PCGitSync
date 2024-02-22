@@ -1,4 +1,4 @@
-# PCGitSync
+# PC Git Sync
 Simple tray app to automate quirks when using *git* as a PC synchronization method.
 
 <img src="https://github.com/MinikPLayer/PCGitSync/blob/main/Screenshot.png" alt="drawing" width="600"/>
