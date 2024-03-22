@@ -40,7 +40,10 @@ Future<void> setSystemTrayIcon({bool delayed = true}) async {
 }
 
 Future<void> initSystemTray() async {
-  await trayManager.setToolTip("Repos synchronizer");
+  // await trayManager.setToolTip("Repos synchronizer");
+  if (Platform.isMacOS || Platform.isWindows) {
+    await trayManager.setToolTip("Repos synchronizer");
+  }
   await setSystemTrayIcon(delayed: false);
 
   final menu = Menu(items: [
@@ -73,13 +76,19 @@ Future restoreWindow({bool show = true, bool useTrayPos = false, bool useTrayFul
 
       Offset? position;
       if (useTrayPos) {
-        var bounds = await trayManager.getBounds();
-        if (bounds != null) {
-          if (!useTrayFullSize) {
-            windowSize = const Size(450, 325);
+        Rect? bounds;
+        if (Platform.isLinux) {
+          await windowManager.setAlignment(Alignment.topRight);
+        } else {
+          bounds = await trayManager.getBounds();
+
+          if (bounds != null) {
+            if (!useTrayFullSize) {
+              windowSize = const Size(450, 325);
+            }
+            position = Offset(bounds.left, bounds.top);
+            position -= Offset(windowSize.width / 2, windowSize.height);
           }
-          position = Offset(bounds.left, bounds.top);
-          position -= Offset(windowSize.width / 2, windowSize.height);
         }
       }
 
@@ -98,7 +107,11 @@ Future restoreWindow({bool show = true, bool useTrayPos = false, bool useTrayFul
 Future setWindowEffects() {
   var osVersion = Platform.operatingSystemVersion;
 
-  bool isWindows11 = false;
+  if (Platform.isLinux) {
+    return Future.value(true);
+  }
+
+  var effect = WindowEffect.solid;
   if (Platform.isWindows) {
     const String buildString = "(Build ";
     var buildIndex = osVersion.indexOf(buildString);
@@ -106,14 +119,18 @@ Future setWindowEffects() {
       var build = osVersion.substring(buildIndex + buildString.length, osVersion.indexOf(')'));
       var buildInt = int.tryParse(build);
       if (buildInt != null && buildInt >= 22000) {
-        isWindows11 = true;
+        // Is Windows 11
+        effect = WindowEffect.mica;
+      } else {
+        // Windows 10 or lower
+        effect = WindowEffect.aero;
       }
     }
   }
 
   if (isDesktop) {
     return facrylic.Window.setEffect(
-      effect: isWindows11 ? WindowEffect.mica : WindowEffect.aero,
+      effect: effect,
       color: Colors.black.withAlpha(196),
       dark: isDarkMode,
     );
@@ -210,6 +227,8 @@ class _MyAppState extends State<MyApp> with WindowListener, TrayListener {
           setSystemTrayIcon();
         }
 
+        var bgColor = Platform.isLinux ? Colors.black : Colors.transparent;
+
         return FluentApp(
           navigatorKey: navigationKey,
           debugShowCheckedModeBanner: false,
@@ -220,21 +239,21 @@ class _MyAppState extends State<MyApp> with WindowListener, TrayListener {
           darkTheme: FluentThemeData(
             brightness: Brightness.dark,
             acrylicBackgroundColor: Colors.purple.withOpacity(0.5),
-            inactiveBackgroundColor: Colors.transparent,
-            activeColor: Colors.transparent,
+            inactiveBackgroundColor: bgColor,
+            activeColor: bgColor,
             accentColor: SystemTheme.accentColor.accent.toAccentColor(),
             visualDensity: VisualDensity.standard,
             focusTheme: FocusThemeData(
               glowFactor: is10footScreen(context) ? 2.0 : 0.0,
             ),
-            navigationPaneTheme: const NavigationPaneThemeData(
-              backgroundColor: Colors.transparent,
+            navigationPaneTheme: NavigationPaneThemeData(
+              backgroundColor: bgColor,
             ),
           ),
           theme: FluentThemeData(
             accentColor: SystemTheme.accentColor.accent.toAccentColor(),
-            acrylicBackgroundColor: Colors.transparent,
-            inactiveBackgroundColor: Colors.transparent,
+            acrylicBackgroundColor: bgColor,
+            inactiveBackgroundColor: bgColor,
             visualDensity: VisualDensity.standard,
             focusTheme: FocusThemeData(
               glowFactor: is10footScreen(context) ? 2.0 : 0.0,
@@ -362,7 +381,7 @@ class _MyHomePageState extends State<MyHomePage> {
 
     // Use transparent container to disable error sound on click
     return Container(
-      color: Colors.transparent,
+      color: Platform.isLinux ? Colors.grey : Colors.transparent,
       child: Column(
         mainAxisAlignment: MainAxisAlignment.start,
         children: [
