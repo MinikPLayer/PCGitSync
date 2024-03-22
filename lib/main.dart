@@ -5,6 +5,7 @@ import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart' as mat;
 import 'package:flutter/scheduler.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_acrylic/flutter_acrylic.dart' as facrylic;
 import 'package:flutter_acrylic/window_effect.dart';
 import 'package:hotkey_manager/hotkey_manager.dart';
@@ -175,6 +176,8 @@ class MyApp extends StatefulWidget {
 }
 
 class _MyAppState extends State<MyApp> with WindowListener, TrayListener {
+  final FocusNode _focusNode = FocusNode();
+
   @override
   void initState() {
     super.initState();
@@ -183,9 +186,14 @@ class _MyAppState extends State<MyApp> with WindowListener, TrayListener {
     _init();
   }
 
+  @override
+  void onWindowBlur() {
+    windowManager.hide();
+  }
+
   void _init() async {
-    await windowManager.setPreventClose(true);
     await windowManager.hide();
+    await windowManager.setPreventClose(true);
   }
 
   @override
@@ -229,12 +237,19 @@ class _MyAppState extends State<MyApp> with WindowListener, TrayListener {
 
         var bgColor = Platform.isLinux ? Colors.black : Colors.transparent;
 
+        FocusScope.of(context).requestFocus(_focusNode);
         return FluentApp(
           navigatorKey: navigationKey,
           debugShowCheckedModeBanner: false,
-          home: ChangeNotifierProvider(
-            create: (c) => GitProvider(navigationKey),
-            child: const MyHomePage(title: 'Hello world!'),
+          home: KeyboardListener(
+            focusNode: _focusNode,
+            onKeyEvent: (value) => {
+              if (value.logicalKey == LogicalKeyboardKey.escape) {windowManager.hide()}
+            },
+            child: ChangeNotifierProvider(
+              create: (c) => GitProvider(navigationKey),
+              child: const MyHomePage(title: 'Hello world!'),
+            ),
           ),
           darkTheme: FluentThemeData(
             brightness: Brightness.dark,
